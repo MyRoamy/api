@@ -22,8 +22,7 @@ export default async function handler(req, res) {
         region: d.region || null,
         lookupId: d.lookupId || null
       }));
-      setCache(`destinations:${lang}`, index, 24*60*60*1000); // 24h TTL
-    }
+      setCache(`destinations:${lang}`, index, 24*60*60*1000);
 
     // optional filtering at the edge
     let results = index;
