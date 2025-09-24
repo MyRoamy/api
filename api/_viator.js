@@ -1,7 +1,5 @@
-// Helper to call Viator with correct headers & error handling
 const BASE_URL = process.env.VIATOR_BASE_URL || "https://api.sandbox.viator.com/partner";
-const API_VERSION = process.env.VIATOR_API_VERSION || "2.0"; // required in Accept
-const API_KEY_HEADER = process.env.VIATOR_API_KEY_HEADER || "exp-api-key"; // matches your docs
+const API_VERSION = process.env.VIATOR_API_VERSION || "2.0";
 const API_KEY = process.env.VIATOR_API_KEY;
 
 export async function viator(path, { method = "GET", language = "en-US", body, query } = {}) {
@@ -11,7 +9,7 @@ export async function viator(path, { method = "GET", language = "en-US", body, q
   const headers = {
     "Accept": `application/json;version=${API_VERSION}`,
     "Accept-Language": language,
-    [API_KEY_HEADER]: API_KEY
+    "exp-api-key": API_KEY       // <— hardcode header name, env only holds the key
   };
   if (body) headers["Content-Type"] = "application/json";
 
@@ -29,7 +27,6 @@ export async function viator(path, { method = "GET", language = "en-US", body, q
   return json;
 }
 
-// Basic CORS
 export function setCors(res) {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
