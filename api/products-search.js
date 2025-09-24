@@ -2,7 +2,6 @@ import { viator, setCors } from "./_viator";
 import { getCache, setCache } from "./_cache";
 
 async function resolveDestinationIdByName(lang, name) {
-  // Try cache first
   let index = getCache(`destinations:${lang}`);
   if (!index) {
     const data = await viator("/destinations", { language: lang });
@@ -21,6 +20,17 @@ async function resolveDestinationIdByName(lang, name) {
   return (exact || contains)?.id || null;
 }
 
+function thumbFromSearch(p) {
+  return (
+    p.primaryPhoto?.small ||
+    p.primaryPhoto?.url ||
+    p.primaryPhoto?.variants?.[0]?.url ||
+    p.photos?.[0]?.small ||
+    p.photos?.[0]?.url ||
+    p.image?.url || ""
+  );
+}
+
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") { setCors(res); return res.status(204).end(); }
   try {
@@ -28,13 +38,14 @@ export default async function handler(req, res) {
     const {
       q,
       destinationId,
-      destinationName,      // NEW: let callers pass a name instead
+      destinationName,
       tags,
       page = 1,
       size = 12,
       lang = "en-US",
       currency = "USD",
-      sort = "RELEVANCE"
+      sort = "RELEVANCE",
+      enrichImages = "true" // allow turning off if needed
     } = req.query;
 
     let destId = destinationId ? Number(destinationId) : null;
@@ -47,7 +58,7 @@ export default async function handler(req, res) {
 
     const filtering = {};
     if (q) filtering.searchTerm = q;
-    if (destId) filtering.destination = String(destId);
+    if (destId) filtering.destination = String(destId); // <-- FIXED SHAPE (string/id)
     if (tags) filtering.tags = String(tags).split(",").map(s => s.trim()).filter(Boolean);
 
     if (Object.keys(filtering).length === 0) {
@@ -62,24 +73,45 @@ export default async function handler(req, res) {
     };
 
     const data = await viator("/products/search", { method: "POST", language: lang, body });
+    let products = data?.products || [];
 
-    const items = (data?.products || []).map(p => ({
+    // Build initial items
+    let items = products.map(p => ({
       code: p.productCode,
       title: p.title,
-      thumbnail: (
-  p.primaryPhoto?.small ||
-  p.primaryPhoto?.url ||
-  p.primaryPhoto?.variants?.[0]?.url ||
-  p.photos?.[0]?.small ||
-  p.photos?.[0]?.url ||
-  p.image?.url || ""
-),
+      thumbnail: thumbFromSearch(p),
       rating: p.reviews?.combinedAverageRating ?? null,
       reviewCount: p.reviews?.totalCount ?? null,
       fromPrice: p.summary?.fromPrice ?? p.fromPrice?.price ?? null,
       currency: data?.currency || currency,
       deeplink: p.productUrl || p.deeplink || null
     }));
+
+    // Enrich thumbnails only for items missing them (cap to 8 calls)
+    if (enrichImages !== "false") {
+      const needs = items.filter(i => !i.thumbnail).slice(0, 8);
+      if (needs.length) {
+        const details = await Promise.allSettled(
+          needs.map(i => viator(`/products/${encodeURIComponent(i.code)}`, { language: lang }))
+        );
+        details.forEach((r, idx) => {
+          if (r.status === "fulfilled") {
+            const d = r.value || {};
+            const thumb =
+              d.primaryPhoto?.small ||
+              d.primaryPhoto?.url ||
+              d.photos?.[0]?.small ||
+              d.photos?.[0]?.url ||
+              d.image?.url || "";
+            if (thumb) {
+              const code = needs[idx].code;
+              const target = items.find(x => x.code === code);
+              if (target) target.thumbnail = thumb;
+            }
+          }
+        });
+      }
+    }
 
     res.status(200).json({ items, raw: data });
   } catch (err) {
