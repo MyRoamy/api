@@ -47,7 +47,7 @@ export default async function handler(req, res) {
 
     const filtering = {};
     if (q) filtering.searchTerm = q;
-    if (destId) filtering.destination = { id: destId };
+    if (destId) filtering.destination = String(destId);
     if (tags) filtering.tags = String(tags).split(",").map(s => s.trim()).filter(Boolean);
 
     if (Object.keys(filtering).length === 0) {
