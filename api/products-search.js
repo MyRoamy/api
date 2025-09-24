@@ -66,7 +66,14 @@ export default async function handler(req, res) {
     const items = (data?.products || []).map(p => ({
       code: p.productCode,
       title: p.title,
-      thumbnail: p.primaryPhoto?.small || p.primaryPhoto?.url || "",
+      thumbnail: (
+  p.primaryPhoto?.small ||
+  p.primaryPhoto?.url ||
+  p.primaryPhoto?.variants?.[0]?.url ||
+  p.photos?.[0]?.small ||
+  p.photos?.[0]?.url ||
+  p.image?.url || ""
+),
       rating: p.reviews?.combinedAverageRating ?? null,
       reviewCount: p.reviews?.totalCount ?? null,
       fromPrice: p.summary?.fromPrice ?? p.fromPrice?.price ?? null,
