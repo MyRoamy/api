@@ -1,22 +1,41 @@
+// /api/products-search.js
 import { viator, setCors } from "./_viator";
 
 export default async function handler(req, res) {
   if (req.method === "OPTIONS") { setCors(res); return res.status(204).end(); }
   try {
     setCors(res);
-    const { q, destination, page = 1, size = 12, currency = "USD", lang = "en-US" } = req.query;
+    const {
+      q,                // search term
+      destinationId,    // numeric destination id (e.g., 684)
+      tags,             // comma-separated tags (optional)
+      page = 1,
+      size = 12,
+      lang = "en-US",
+      currency = "USD",
+      sort = "RELEVANCE" // or PRICE_LOW_TO_HIGH, etc.
+    } = req.query;
 
-    // Your program allows /products/search (POST)
-    const payload = {
-      searchTerm: q || undefined,
-      destination: destination || undefined,
+    // Build filtering exactly how v2 expects
+    const filtering = {};
+    if (q) filtering.searchTerm = q;
+    if (destinationId) filtering.destination = { id: Number(destinationId) };
+    if (tags) filtering.tags = String(tags).split(",").map(s => s.trim()).filter(Boolean);
+
+    if (Object.keys(filtering).length === 0) {
+      // Viator returns "Missing filtering" if you don't send at least one filter
+      return res.status(400).json({ error: "Provide at least q, destinationId, or tags" });
+    }
+
+    const body = {
+      filtering,
       paging: { page: Number(page), size: Number(size) },
+      sortOrder: sort,
       currency
     };
 
-    const data = await viator("/products/search", { method: "POST", language: lang, body: payload });
+    const data = await viator("/products/search", { method: "POST", language: lang, body });
 
-    // Shape to frontend-friendly fields (adjust if your response fields differ)
     const items = (data?.products || []).map(p => ({
       code: p.productCode,
       title: p.title,
@@ -25,12 +44,11 @@ export default async function handler(req, res) {
       reviewCount: p.reviews?.totalCount ?? null,
       fromPrice: p.summary?.fromPrice ?? p.fromPrice?.price ?? null,
       currency: data?.currency || currency,
-      // If your affiliate response includes a proper deeplink/tracking field, map it here
       deeplink: p.productUrl || p.deeplink || null
     }));
 
-    res.status(200).json({ items, raw: data });
+    return res.status(200).json({ items, raw: data });
   } catch (err) {
-    res.status(err.status || 500).json({ error: "Viator error", detail: err.detail || String(err) });
+    return res.status(err.status || 500).json({ error: "Viator error", detail: err.detail || String(err) });
   }
 }
